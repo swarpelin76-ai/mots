@@ -18,30 +18,7 @@
 
 <!-- Service Worker registration -->
 <script>
-if('serviceWorker' in navigator){
-  window.addEventListener('load', ()=>{
-    // Inline service worker via blob
-    const swCode = `
-const CACHE='worktimer-v1';
-const ASSETS=['/'];
-self.addEventListener('install', e=>{
-  e.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)));
-  self.skipWaiting();
-});
-self.addEventListener('activate', e=>{
-  e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));
-  self.clients.claim();
-});
-self.addEventListener('fetch', e=>{
-  e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)));
-});
-`;
-    const blob = new Blob([swCode], {type:'application/javascript'});
-    const url  = URL.createObjectURL(blob);
-    navigator.serviceWorker.register(url).catch(()=>{});
-  });
-}
-</script>
+// Service worker disabled for compatibility</script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,300&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -641,6 +618,56 @@ body{
   </div>
 </div>
 
+
+<div class="tab-page" id="pg3">
+  <div class="scroll-area">
+
+    <!-- FILTRES -->
+    <div class="sec-title" style="margin-top:4px">Rapport par client</div>
+
+    <!-- Sélection période -->
+    <div class="wk-card-ios" style="margin-bottom:14px;">
+      <div style="padding:14px 16px 10px;border-bottom:0.5px solid var(--gray7);">
+        <div style="font-size:.72rem;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Période</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="period-btn active" data-w="4" onclick="selPeriod(this)">4 sem.</button>
+          <button class="period-btn" data-w="8" onclick="selPeriod(this)">8 sem.</button>
+          <button class="period-btn" data-w="12" onclick="selPeriod(this)">3 mois</button>
+          <button class="period-btn" data-w="0" onclick="selPeriod(this)">Tout</button>
+        </div>
+      </div>
+      <div style="padding:10px 16px;display:flex;align-items:center;gap:8px;">
+        <span style="font-size:.72rem;color:var(--text3);font-weight:600;">Du</span>
+        <input type="date" id="rFrom" style="flex:1;height:36px;padding:0 10px;background:var(--bg);border:1px solid var(--sh-dark);border-radius:8px;font-family:Inter,sans-serif;font-size:.82rem;color:var(--text1);outline:none;">
+        <span style="font-size:.72rem;color:var(--text3);font-weight:600;">au</span>
+        <input type="date" id="rTo" style="flex:1;height:36px;padding:0 10px;background:var(--bg);border:1px solid var(--sh-dark);border-radius:8px;font-family:Inter,sans-serif;font-size:.82rem;color:var(--text1);outline:none;">
+        <button onclick="buildRapport()" style="height:36px;padding:0 14px;background:var(--gold);color:#000;border:none;border-radius:8px;font-family:Inter,sans-serif;font-size:.82rem;font-weight:800;cursor:pointer;">OK</button>
+      </div>
+    </div>
+
+    <!-- Filtre client -->
+    <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center;">
+      <input type="text" id="rClientFilter" placeholder="🔍 Filtrer par client…"
+        style="flex:1;height:44px;padding:0 14px;background:var(--bg);border:1px solid var(--sh-dark);border-radius:var(--radius);font-family:Inter,sans-serif;font-size:.92rem;color:var(--text1);outline:none;"
+        oninput="buildRapport()">
+    </div>
+
+    <!-- RÉSULTATS -->
+    <div id="rapportWrap"></div>
+
+    <!-- EXPORT -->
+    <div style="display:flex;gap:10px;margin-top:4px;" id="rapportExport" style="display:none">
+      <button onclick="copyRapport()" style="flex:1;height:48px;background:var(--bg);box-shadow:var(--neu-sm);border:none;border-radius:var(--radius-lg);font-family:Inter,sans-serif;font-size:.88rem;font-weight:700;color:var(--text1);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+        📋 Copier
+      </button>
+      <button onclick="exportRapportTxt()" style="flex:1;height:48px;background:var(--text1);border:none;border-radius:var(--radius-lg);font-family:Inter,sans-serif;font-size:.88rem;font-weight:700;color:var(--bg);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+        💾 Exporter
+      </button>
+    </div>
+
+  </div>
+</div>
+
 <nav class="nav-bar">
   <button class="nav-item active" onclick="switchNav(0,this)">
     <div class="nav-icon">⏱</div><span class="nav-lbl">Saisie</span>
@@ -651,11 +678,38 @@ body{
   <button class="nav-item" onclick="switchNav(2,this)">
     <div class="nav-icon">📋</div><span class="nav-lbl">Copier</span>
   </button>
+  <button class="nav-item" onclick="switchNav(3,this)">
+    <div class="nav-icon">🔍</div><span class="nav-lbl">Clients</span>
+  </button>
 </nav>
 
 <div class="toast" id="toast"></div>
 
+
+
 <script>
+// Show install banner on iOS Safari if not already installed
+(function(){
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isSafari = /safari/i.test(navigator.userAgent) && !/chrome|crios|fxios/i.test(navigator.userAgent);
+  const isStandalone = window.navigator.standalone === true;
+  const dismissed = localStorage.getItem('installDismissed');
+  if(isIOS && isSafari && !isStandalone && !dismissed){
+    setTimeout(()=>{
+      document.getElementById('installBanner').classList.add('show');
+    }, 2000);
+  }
+  // Remember dismissal
+  document.getElementById('installBanner').querySelector('.ib-close').addEventListener('click', ()=>{
+    localStorage.setItem('installDismissed','1');
+  });
+})();
+</script>
+
+
+<script>
+
+
 const DAYS=['Lundi','Mardi','Mercredi','Jeudi','Vendredi'];
 const DS=['Lun','Mar','Mer','Jeu','Ven'];
 const TARGET=525;
@@ -672,9 +726,9 @@ const wl=document.getElementById('weekLabel');
 if(wl){const d=WD[0];wl.textContent=`Sem. ${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')}`;}
 
 function defTask(i,s,c,o){return{id:Date.now()+i*300+s,client:c,object:o,elapsed:0,manual:'',recurring:true};}
-function defDay(i){return{start:'',end:'',pause:45,notes:'',tasks:[defTask(i,1,'Débitage standard',''),defTask(i,2,'Atelier bureau','Rangement / organisation')]};}
+function defDay(i){return{start:'07:00',end:'17:00',pause:90,notes:'',tasks:[defTask(i,1,'Débitage standard',''),defTask(i,2,'Atelier bureau','Rangement / organisation')]};}
 
-let D=JSON.parse(localStorage.getItem(WKEY)||'null');
+let D=null;try{D=JSON.parse(localStorage.getItem(WKEY)||'null');}catch(e){D=null;}
 if(!D)D={days:DAYS.map((_,i)=>defDay(i))};
 D.days.forEach((day,i)=>{
   if(!day.tasks)day.tasks=[];
@@ -682,6 +736,7 @@ D.days.forEach((day,i)=>{
     if(t.elapsed==null)t.elapsed=0;if(t.manual==null)t.manual='';
     if(t.client==null){t.client=t.name||'';delete t.name;}
     if(t.object==null)t.object='';delete t.emoji;
+    if(t.recurring)t.locked=false;
   });
   if(!day.tasks.length){day.tasks.push(defTask(i,1,'Débitage standard',''));day.tasks.push(defTask(i,2,'Atelier bureau','Rangement / organisation'));}
 });
@@ -697,13 +752,20 @@ const m2hm=m=>(m==null||isNaN(m)||m<0)?'--h--':`${Math.floor(m/60)}h${String(m%6
 const rQ=m=>Math.round(m/15)*15;
 const s2hms=s=>{const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=s%60;return`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;};
 const s2hm=s=>{const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return`${h}h${String(m).padStart(2,'0')}`;};
-const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+// Arrondi au quart d'heure par tâche
+const s2hm_rnd=s=>{
+  const totalMin=s/60;
+  const rounded=Math.round(totalMin/15)*15;
+  const h=Math.floor(rounded/60),m=rounded%60;
+  return`${h}h${String(m).padStart(2,'0')}`;
+};
+const esc=s=>String(s||'').replace(/[&<"]/g,function(c){var m={'&':'\x26amp;','<':'\x26lt;','"':'\x26quot;'};return m[c]||c;});
 function netMin(day){const s=t2m(day.start),e=t2m(day.end);if(!day.start||!day.end)return null;const r=e-s-(day.pause||0);return r>0?r:0;}
 function rndMin(day){const n=netMin(day);return n==null?null:rQ(n);}
 function taskLabel(t){const c=(t.client||'').trim(),o=(t.object||'').trim();if(c&&o)return`${c} — ${o}`;return c||o||'Sans nom';}
 
 function getLive(tid,di){
-  const t=D.days[di]?.tasks.find(t=>t.id===tid);if(!t)return 0;
+  const _d1=D.days[di];const t=_d1?_d1.tasks.find(t=>t.id===tid):null;if(!t)return 0;
   let e=t.elapsed||0;
   if(runningTimer&&runningTimer.taskId===tid&&runningTimer.dayIdx===di)e+=Math.floor((Date.now()-runningTimer.startedAt)/1000);
   return e;
@@ -713,13 +775,13 @@ function pauseTimer(tid,di){if(!runningTimer||runningTimer.taskId!==tid||running
 function pauseActive(){if(runningTimer)pauseTimer(runningTimer.taskId,runningTimer.dayIdx);}
 function resetTimer(tid,di){
   if(runningTimer&&runningTimer.taskId===tid&&runningTimer.dayIdx===di){runningTimer=null;clearInterval(tickInterval);tickInterval=null;}
-  const t=D.days[di]?.tasks.find(t=>t.id===tid);if(t)t.elapsed=0;
+  const _d2=D.days[di];const t=_d2?_d2.tasks.find(t=>t.id===tid):null;if(t)t.elapsed=0;
   updateBanner();refreshTask(tid,di);repaintRing(di);buildWeekSummary();refreshCopyCards();save();
 }
 function commitTimer(){
   if(!runningTimer)return;
   const{taskId,dayIdx,startedAt}=runningTimer;
-  const t=D.days[dayIdx]?.tasks.find(t=>t.id===taskId);
+  const _d3=D.days[dayIdx];const t=_d3?_d3.tasks.find(t=>t.id===taskId):null;
   if(t)t.elapsed=(t.elapsed||0)+Math.floor((Date.now()-startedAt)/1000);
   runningTimer=null;clearInterval(tickInterval);tickInterval=null;
 }
@@ -734,7 +796,7 @@ function updateBanner(){
   const b=document.getElementById('liveBanner');
   if(!runningTimer){b.classList.remove('on');return;}
   const{taskId,dayIdx}=runningTimer;
-  const t=D.days[dayIdx]?.tasks.find(t=>t.id===taskId);
+  const _d4=D.days[dayIdx];const t=_d4?_d4.tasks.find(t=>t.id===taskId):null;
   document.getElementById('liveTask').textContent=`${taskLabel(t)} · ${DAYS[dayIdx]}`;
   document.getElementById('liveTime').textContent=s2hms(getLive(taskId,dayIdx));
   b.classList.add('on');
@@ -760,6 +822,7 @@ function switchNav(idx,btn){
   activeNav=idx;
   if(idx===1){buildWeekSummary();buildWeekDetail();}
   if(idx===2)refreshCopyCards();
+  if(idx===3){setPeriodDates();buildRapport();}
 }
 
 // Ring progress
@@ -821,33 +884,77 @@ function buildDayPanels(){
   });
 }
 
+
+// Arrondir une saisie manuelle (ex: "2h37" → "2h30", "2h25" → "2h30")
+function roundManual(val){
+  if(!val)return val;
+  const v=val.trim().toLowerCase();
+  let totalMin=0;
+  const mH=v.match(/^(\d+)h(\d*)$/);
+  const mC=v.match(/^(\d+):(\d{2})$/);
+  const mM=v.match(/^(\d+)$/);
+  if(mH){totalMin=parseInt(mH[1])*60+(parseInt(mH[2]||'0')||0);}
+  else if(mC){totalMin=parseInt(mC[1])*60+parseInt(mC[2]);}
+  else if(mM){totalMin=parseInt(mM[1]);}
+  else return val;
+  const rounded=Math.round(totalMin/15)*15;
+  const h=Math.floor(rounded/60),m=rounded%60;
+  return`${h}h${String(m).padStart(2,'0')}`;
+}
+
 function taskCardHTML(t,i){
   const isR=runningTimer&&runningTimer.taskId===t.id&&runningTimer.dayIdx===i;
   const el=getLive(t.id,i);
+  const isLocked=t.locked===true;
   const canCarry=!t.recurring,alreadyCarried=t.carriedTo!=null;
   const nextLabel=i===4?'Lundi prochain':DAYS[i+1];
   const carriedTag=t.carriedFrom!=null?`<span class="carried-tag">↩ reportée</span>`:'';
   const carryBtn=canCarry?`<button class="btn-sm btn-carry ${alreadyCarried?'done':''}" data-carry="${t.id}" data-di="${i}">${alreadyCarried?'✓ Reportée':'↷ '+nextLabel}</button>`:'';
-  return`<div class="task-card ${t.recurring?'rec':''} ${isR?'running':''}" id="ti_${t.id}">
-    <div class="task-id">
-      <div style="display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;">
-        <input class="task-client" type="text" value="${esc(t.client||'')}" placeholder="Nom du client…" data-f="client" data-id="${t.id}" style="flex:1;min-width:130px;">
-        ${carriedTag}
-      </div>
-      <input class="task-object" type="text" value="${esc(t.object||'')}" placeholder="Objet (armoire, terrasse…)" data-f="object" data-id="${t.id}">
-    </div>
-    <div class="task-timer">
-      <span class="timer-num" id="td_${t.id}">${s2hms(el)}</span>
-      <button class="btn ${isR?'btn-pause':'btn-play'}" id="tb_${t.id}" data-tid="${t.id}" data-di="${i}">${isR?'⏸ Pause':(el>0?'▶ Reprendre':'▶ Démarrer')}</button>
-      <button class="btn-sm" data-rid="${t.id}" data-di="${i}">↺ Remettre à zéro</button>
-      ${carryBtn}
-      <button class="btn-sm btn-del" data-did="${t.id}">Supprimer</button>
-    </div>
+
+  // Temps arrondi au ¼h le plus proche
+  const elRnd = s2hm_rnd(el);
+  const elRaw = s2hms(el);
+
+  // Si verrouillé : afficher arrondi + brut, masquer les boutons timer
+  const timerBlock = isLocked
+    ? `<div class="locked-display">
+        <span class="locked-rounded">${t.manual||elRnd}</span>
+        <span class="locked-raw">brut ${elRaw}</span>
+      </div>`
+    : `<div class="task-timer">
+        <span class="timer-num" id="td_${t.id}">${elRaw}</span>
+        <button class="btn ${isR?'btn-pause':'btn-play'}" id="tb_${t.id}" data-tid="${t.id}" data-di="${i}">${isR?'⏸ Pause':(el>0?'▶ Reprendre':'▶ Démarrer')}</button>
+        <button class="btn-sm" data-rid="${t.id}" data-di="${i}">↺ Remettre à zéro</button>
+        ${carryBtn}
+        <button class="btn-sm btn-del" data-did="${t.id}">Supprimer</button>
+      </div>`;
+
+  const manualBlock = isLocked ? '' : `
     <div class="task-manual">
       <span class="m-lbl">Manuel</span>
       <input class="m-inp" type="text" value="${esc(t.manual||'')}" placeholder="2h30" data-f="manual" data-id="${t.id}">
       <span class="m-hint">prioritaire</span>
       <span class="running-tag">En cours</span>
+    </div>`;
+
+  return`<div class="task-card ${t.recurring?'rec':''} ${isR?'running':''} ${isLocked?'locked':''}" id="ti_${t.id}">
+    <div class="task-id">
+      <div style="display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+        <input class="task-client" type="text" value="${esc(t.client||'')}" placeholder="Nom du client…" data-f="client" data-id="${t.id}" style="flex:1;min-width:130px;" ${isLocked?'readonly':''}>
+        <span class="lock-badge ${isLocked?'islocked':'unlocked'}">
+          ${isLocked?'🟡 Validé':'⚪ En cours'}
+        </span>
+        ${carriedTag}
+      </div>
+      <input class="task-object" type="text" value="${esc(t.object||'')}" placeholder="Objet (armoire, terrasse…)" data-f="object" data-id="${t.id}" ${isLocked?'readonly':''}>
+    </div>
+    ${timerBlock}
+    ${manualBlock}
+    <div style="padding:6px 16px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <button class="btn-lock ${isLocked?'locked':''}" data-lock="${t.id}" data-di="${i}">
+        ${isLocked?'🔒 Verrouillé':'🔓 Valider & verrouiller'}
+      </button>
+      ${isLocked?`<button class="btn-sm btn-del" data-did="${t.id}">Supprimer</button>`:''}
     </div>
   </div>`;
 }
@@ -856,7 +963,7 @@ function dayHTML(i){
   const day=D.days[i],d=WD[i];
   const n=netMin(day),r=rndMin(day);
   const dateStr=`${DAYS[i]} ${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')}.${d.getFullYear()}`;
-  const pauses=[0,15,30,45,60];
+  const pauses=[0,15,30,45,60,75,90];
   return`
     ${ringHTML(i)}
     <div class="sec-lbl">Tâches · ${dateStr}</div>
@@ -896,10 +1003,24 @@ function attachEvents(i){
   pnl.querySelectorAll('.seg-btn').forEach(btn=>btn.addEventListener('click',()=>{
     D.days[i].pause=parseInt(btn.dataset.p);save();
     pnl.querySelectorAll('.seg-btn').forEach(b=>b.classList.toggle('on',parseInt(b.dataset.p)===D.days[i].pause));
+    // Mettre à jour la durée nette affichée
+    const day=D.days[i],n=netMin(day),r=rndMin(day);
+    const dr=document.getElementById(`dur_${i}`);
+    if(dr)dr.innerHTML=`<div><div class="dur-lbl">Durée nette</div><div class="dur-rnd">Arrondie ¼h → <strong>${r!=null?m2hm(r):'—'}</strong></div></div><div class="dur-val">${n!=null?m2hm(n):'—'}</div>`;
     repaintRing(i);buildWeekSummary();
   }));
   const pc=pnl.querySelector('.pause-c');
   if(pc)pc.addEventListener('change',()=>{const v=parseInt(pc.value);if(!isNaN(v)){D.days[i].pause=v;save();repaintRing(i);}});
+  pnl.querySelectorAll('.m-inp').forEach(el=>el.addEventListener('blur',()=>{
+    const id=parseInt(el.dataset.id);
+    const t=D.days[i].tasks.find(t=>t.id===id);
+    if(t&&el.value){
+      const rounded=roundManual(el.value);
+      el.value=rounded;
+      t.manual=rounded;
+      save();buildWeekSummary();refreshCopyCards();
+    }
+  }));
   pnl.querySelectorAll('.task-client,.task-object,.m-inp').forEach(el=>el.addEventListener('input',()=>{
     const id=parseInt(el.dataset.id),f=el.dataset.f;
     const t=D.days[i].tasks.find(t=>t.id===id);if(t){t[f]=el.value;save();buildWeekSummary();refreshCopyCards();}
@@ -940,6 +1061,31 @@ function attachEvents(i){
     D.days[i].tasks=D.days[i].tasks.filter(t=>t.id!==id);
     save();buildDayPanels();buildWeekSummary();
   }));
+  // Lock buttons
+  pnl.querySelectorAll('[data-lock]').forEach(btn=>btn.addEventListener('click',()=>{
+    const tid=parseInt(btn.dataset.lock);
+    const di=parseInt(btn.dataset.di);
+    const _d5=D.days[di];const t=_d5?_d5.tasks.find(t=>t.id===tid):null;
+    if(!t)return;
+    if(t.locked){
+      // Déverrouiller
+      t.locked=false;
+    } else {
+      // Arrêter le timer si en cours
+      if(runningTimer&&runningTimer.taskId===tid){pauseTimer(tid,di);}
+      // Verrouiller avec arrondi
+      t.locked=true;
+      // Si pas de saisie manuelle, stocker l'arrondi comme manuel
+      if(!t.manual&&t.elapsed>0){
+        t.manual=s2hm_rnd(t.elapsed);
+      } else if(t.manual){
+        // Arrondir la saisie manuelle aussi
+        t.manual=roundManual(t.manual);
+      }
+    }
+    save();buildDayPanels();buildWeekSummary();refreshCopyCards();
+  }));
+
   const addBtn=pnl.querySelector('.add-btn');
   if(addBtn)addBtn.addEventListener('click',()=>{
     D.days[i].tasks.push({id:Date.now(),client:'',object:'',elapsed:0,manual:'',recurring:false});
@@ -968,7 +1114,7 @@ function buildWeekDetail(){
     if(!day.start&&!day.end)return;
     const card=document.createElement('div');card.className='wk-detail-card';
     const tks=day.tasks.map(t=>{
-      const el=getLive(t.id,i),dur=t.manual||(el>0?s2hm(el):null);
+      const el=getLive(t.id,i),dur=t.manual||(el>0?s2hm_rnd(el):null);
       return`<div class="wkdr-task"><span class="wkdrt-n">${esc(taskLabel(t))}</span>${dur?`<span class="wkdrt-d">${esc(dur)}</span>`:''}</div>`;
     }).join('');
     card.innerHTML=`
@@ -981,7 +1127,7 @@ function buildWeekDetail(){
 }
 
 function taskCopyLine(t,i){
-  const el=getLive(t.id,i),dur=t.manual||(el>0?s2hm(el):null);
+  const el=getLive(t.id,i),dur=t.manual||(el>0?s2hm_rnd(el):null);
   const label=taskLabel(t);
   if(!label||label==='Sans nom')return null;
   if(t.recurring&&!dur)return null;
@@ -1004,7 +1150,7 @@ function refreshCopyCards(){
     const day=D.days[i],d=WD[i],r=rndMin(day);
     const dateStr=`${DAYS[i]} ${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')}.${d.getFullYear()}`;
     const rowsHTML=day.tasks.map(t=>{
-      const el=getLive(t.id,i),dur=t.manual||(el>0?s2hm(el):null);
+      const el=getLive(t.id,i),dur=t.manual||(el>0?s2hm_rnd(el):null);
       const label=taskLabel(t);if(label==='Sans nom')return'';if(t.recurring&&!dur)return'';
       return`<div class="copy-row ${dur?'':'cr-nodur'}">
         <span class="cr-name">${esc(label)}${t.carriedFrom!=null?' ↩':''}</span>
@@ -1046,28 +1192,241 @@ function copyWeek(){
 (function(){
   const dow=new Date().getDay();if(dow>=1&&dow<=5)activeDay=dow-1;
   buildDayPills();buildDayPanels();buildWeekSummary();refreshCopyCards();updateBanner();
+  setPeriodDates();
   if(runningTimer&&!tickInterval)tickInterval=setInterval(tick,1000);
-})();
-</script>
 
-<script>
-// Show install banner on iOS Safari if not already installed
-(function(){
-  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  const isSafari = /safari/i.test(navigator.userAgent) && !/chrome|crios|fxios/i.test(navigator.userAgent);
-  const isStandalone = window.navigator.standalone === true;
-  const dismissed = localStorage.getItem('installDismissed');
-  if(isIOS && isSafari && !isStandalone && !dismissed){
-    setTimeout(()=>{
-      document.getElementById('installBanner').classList.add('show');
-    }, 2000);
-  }
-  // Remember dismissal
-  document.getElementById('installBanner').querySelector('.ib-close').addEventListener('click', ()=>{
-    localStorage.setItem('installDismissed','1');
+  // ── Page Visibility: restart timer when app comes back to foreground ──
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible'){
+      // App is back in foreground
+      if(runningTimer){
+        // Clear old interval and restart fresh
+        if(tickInterval){clearInterval(tickInterval);tickInterval=null;}
+        // Force immediate display update
+        const{taskId,dayIdx}=runningTimer;
+        const disp=document.getElementById(`td_${taskId}`);
+        if(disp)disp.textContent=s2hms(getLive(taskId,dayIdx));
+        document.getElementById('liveTime').textContent=s2hms(getLive(taskId,dayIdx));
+        repaintRing(dayIdx);
+        // Restart interval
+        tickInterval=setInterval(tick,1000);
+      }
+    } else {
+      // App going to background — save current state
+      if(runningTimer){
+        // Commit current elapsed but keep timer "running" via startedAt
+        // No need to stop — getLive() calculates from startedAt dynamically
+        save();
+      }
+    }
   });
-})();
-</script>
 
+  // ── Also handle page focus/blur for PC browsers ──
+  window.addEventListener('focus',()=>{
+    if(runningTimer){
+      if(tickInterval){clearInterval(tickInterval);tickInterval=null;}
+      const{taskId,dayIdx}=runningTimer;
+      const disp=document.getElementById(`td_${taskId}`);
+      if(disp)disp.textContent=s2hms(getLive(taskId,dayIdx));
+      document.getElementById('liveTime').textContent=s2hms(getLive(taskId,dayIdx));
+      repaintRing(dayIdx);
+      tickInterval=setInterval(tick,1000);
+    }
+  });
+
+// ════════════════════════════════════
+//  RAPPORT PAR CLIENT
+// ════════════════════════════════════
+let rapportWeeks=4;
+let rapportData={};
+
+function selPeriod(btn){
+  document.querySelectorAll('.period-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  rapportWeeks=parseInt(btn.dataset.w);
+  setPeriodDates();
+  buildRapport();
+}
+
+function setPeriodDates(){
+  const to=new Date();
+  const from=new Date();
+  if(rapportWeeks>0) from.setDate(from.getDate()-rapportWeeks*7);
+  else from.setFullYear(2020);
+  const rFrom=document.getElementById('rFrom');
+  const rTo=document.getElementById('rTo');
+  if(rFrom) rFrom.value=from.toISOString().slice(0,10);
+  if(rTo) rTo.value=to.toISOString().slice(0,10);
+}
+
+function getAllWeekKeys(fromDate,toDate){
+  const keys=[];
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(!k||!k.startsWith('pmAlpes_')) continue;
+    const dateStr=k.replace('pmAlpes_','');
+    const d=new Date(dateStr);
+    if(d>=fromDate&&d<=toDate) keys.push(k);
+  }
+  return keys.sort();
+}
+
+function timeStrToMin(s){
+  if(!s) return 0;
+  const v=s.trim();
+  const mH=v.match(/^(\d+)h(\d*)$/);
+  const mC=v.match(/^(\d+):(\d{2})$/);
+  if(mH) return parseInt(mH[1])*60+(parseInt(mH[2]||'0')||0);
+  if(mC) return parseInt(mC[1])*60+parseInt(mC[2]);
+  return 0;
+}
+
+function minToHm(m){
+  return Math.floor(m/60)+'h'+String(m%60).padStart(2,'0');
+}
+
+function buildRapport(){
+  const rFrom=document.getElementById('rFrom');
+  const rTo=document.getElementById('rTo');
+  if(!rFrom||!rTo) return;
+  const fromVal=rFrom.value;
+  const toVal=rTo.value;
+  const filterEl=document.getElementById('rClientFilter');
+  const filter=filterEl?(filterEl.value||'').toLowerCase().trim():'';
+  if(!fromVal||!toVal) return;
+
+  const fromDate=new Date(fromVal);
+  const toDate=new Date(toVal);
+  toDate.setHours(23,59,59);
+
+  const keys=getAllWeekKeys(fromDate,toDate);
+  const clientMap={};
+
+  keys.forEach(function(key){
+    const weekData=JSON.parse(localStorage.getItem(key)||'null');
+    if(!weekData) return;
+    const monDate=new Date(key.replace('pmAlpes_',''));
+
+    weekData.days.forEach(function(day,di){
+      const dayDate=new Date(monDate);
+      dayDate.setDate(monDate.getDate()+di);
+      if(dayDate<fromDate||dayDate>toDate) return;
+      const dateStr=dayDate.toLocaleDateString('fr-CH',{day:'2-digit',month:'2-digit',year:'numeric'});
+
+      day.tasks.forEach(function(t){
+        const client=(t.client||'').trim();
+        const objet=(t.object||'').trim();
+        if(!client||client==='Débitage standard'||client==='Atelier bureau') return;
+        let timeStr='';
+        if(t.manual){ timeStr=t.manual; }
+        else if(t.elapsed>0){ timeStr=s2hm_rnd(t.elapsed); }
+        else return;
+        if(filter&&client.toLowerCase().indexOf(filter)===-1) return;
+        if(!clientMap[client]) clientMap[client]=[];
+        clientMap[client].push({date:dateStr,dateRaw:dayDate,objet:objet,timeStr:timeStr,locked:t.locked||false});
+      });
+    });
+  });
+
+  rapportData=clientMap;
+  renderRapport(clientMap,fromVal,toVal);
+}
+
+function renderRapport(clientMap,fromVal,toVal){
+  const wrap=document.getElementById('rapportWrap');
+  const exportDiv=document.getElementById('rapportExport');
+  if(!wrap) return;
+  const clients=Object.keys(clientMap).sort();
+
+  if(!clients.length){
+    wrap.innerHTML='<div style="text-align:center;padding:40px 0;color:var(--text3);font-size:.88rem;">Aucune tâche trouvée sur cette période</div>';
+    if(exportDiv) exportDiv.style.display='none';
+    return;
+  }
+
+  let grandTotal=0;
+  clients.forEach(function(cl){ clientMap[cl].forEach(function(r){ grandTotal+=timeStrToMin(r.timeStr); }); });
+
+  const fromD=new Date(fromVal).toLocaleDateString('fr-CH',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const toD=new Date(toVal).toLocaleDateString('fr-CH',{day:'2-digit',month:'2-digit',year:'numeric'});
+
+  let html='<div style="background:var(--text1);border-radius:var(--radius-lg);padding:16px 18px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;">'
+    +'<div><div style="font-size:.7rem;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.08em;">Total période</div>'
+    +'<div style="font-size:.72rem;color:rgba(255,255,255,.3);margin-top:2px;">'+fromD+' → '+toD+'</div></div>'
+    +'<div style="font-family:Inter,monospace;font-size:1.4rem;font-weight:900;color:var(--bg);letter-spacing:-.03em;">'+minToHm(grandTotal)+'</div></div>';
+
+  clients.forEach(function(cl){
+    const rows=clientMap[cl];
+    const total=rows.reduce(function(s,r){ return s+timeStrToMin(r.timeStr); },0);
+    let rowsHtml='';
+    rows.forEach(function(r){
+      rowsHtml+='<div style="display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--sh-dark);">'
+        +'<div style="font-size:.72rem;font-weight:600;color:var(--text3);min-width:80px;flex-shrink:0;">'+r.date+'</div>'
+        +'<div style="flex:1;font-size:.85rem;font-weight:600;color:var(--text1);">'+(r.objet||'—')+'</div>'
+        +'<div style="font-family:Inter,monospace;font-size:.85rem;font-weight:700;color:var(--gold);flex-shrink:0;">'+r.timeStr+'</div>'
+        +(r.locked?'<span style="font-size:.6rem;color:var(--green);background:rgba(52,199,89,.1);padding:2px 6px;border-radius:6px;flex-shrink:0;">✓</span>':'')
+        +'</div>';
+    });
+
+    html+='<div style="background:var(--bg);border-radius:var(--radius-lg);box-shadow:var(--neu);margin-bottom:14px;overflow:hidden;">'
+      +'<div style="padding:14px 16px 10px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--sh-dark);">'
+      +'<div style="font-size:1.05rem;font-weight:800;color:var(--text1);letter-spacing:-.02em;">'+cl+'</div>'
+      +'<div style="font-family:Inter,monospace;font-size:1rem;font-weight:800;color:var(--gold);">'+minToHm(total)+'</div></div>'
+      +'<div>'+rowsHtml+'</div></div>';
+  });
+
+  wrap.innerHTML=html;
+  if(exportDiv) exportDiv.style.display='flex';
+}
+
+function buildRapportText(){
+  const rFrom=document.getElementById('rFrom');
+  const rTo=document.getElementById('rTo');
+  const fromVal=rFrom?rFrom.value:'';
+  const toVal=rTo?rTo.value:'';
+  const fromD=fromVal?new Date(fromVal).toLocaleDateString('fr-CH',{day:'2-digit',month:'2-digit',year:'numeric'}):'';
+  const toD=toVal?new Date(toVal).toLocaleDateString('fr-CH',{day:'2-digit',month:'2-digit',year:'numeric'}):'';
+  let txt='RAPPORT CLIENTS — PM Alpes SA\n';
+  txt+='Période : '+fromD+' → '+toD+'\n';
+  txt+='════════════════════════════════════════\n\n';
+  let grandTotal=0;
+  const clients=Object.keys(rapportData).sort();
+  clients.forEach(function(cl){
+    const rows=rapportData[cl];
+    const total=rows.reduce(function(s,r){ return s+timeStrToMin(r.timeStr); },0);
+    grandTotal+=total;
+    txt+='▸ '+cl+' — Total : '+minToHm(total)+'\n';
+    rows.forEach(function(r){
+      txt+='  '+r.date+'  '+(r.objet?r.objet+' ':'')+': '+r.timeStr+(r.locked?' ✓':'')+'\n';
+    });
+    txt+='\n';
+  });
+  txt+='════════════════════════════════════════\n';
+  txt+='TOTAL GÉNÉRAL : '+minToHm(grandTotal)+'\n';
+  return txt;
+}
+
+function copyRapport(){
+  const txt=buildRapportText();
+  navigator.clipboard.writeText(txt).then(function(){ showToast('✓ Rapport copié'); });
+}
+
+function exportRapportTxt(){
+  const txt=buildRapportText();
+  const blob=new Blob([txt],{type:'text/plain'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  const rFrom=document.getElementById('rFrom');
+  const rTo=document.getElementById('rTo');
+  a.download='Rapport_PMAlpes_'+(rFrom?rFrom.value:'')+'-'+(rTo?rTo.value:'')+'.txt';
+  a.click();
+  showToast('✓ Fichier exporté');
+}
+
+})();
+
+
+
+</script>
 </body>
 </html>
